@@ -1,16 +1,20 @@
-# ---------- Stage 1: PHP + Composer ----------
+# Stage PHP
 FROM php:8.3-fpm as php_builder
 
+# نصب اکستنشن‌ها
 RUN apt-get update && apt-get install -y \
-    git curl zip unzip libpng-dev libonig-dev libxml2-dev libzip-dev \
-    libicu-dev \
+    git curl zip unzip libpng-dev libonig-dev libxml2-dev libzip-dev libicu-dev \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl
 
+# Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www
 
-COPY composer.json composer.lock ./
+# 1️⃣ کپی همه فایل‌ها (نه فقط composer.json)
+COPY . .
+
+# 2️⃣ نصب پکیج‌ها
 RUN composer install --no-dev --optimize-autoloader
 
 
