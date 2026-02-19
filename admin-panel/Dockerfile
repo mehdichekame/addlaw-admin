@@ -1,46 +1,45 @@
-# Stage PHP
-FROM php:8.3-fpm as php_builder
+# ---------- مرحله Node Builder (فرانت‌اند) ----------
+FROM node:20-alpine AS node_builder
 
-# نصب اکستنشن‌ها
+WORKDIR /app
+
+# بسته‌های npm رو کپی و نصب می‌کنیم
+COPY package*.json ./
+RUN npm install
+
+# کل پروژه رو کپی می‌کنیم
+COPY . .
+
+# build فرانت‌اند با Vite
+RUN npm run build
+
+# ---------- مرحله PHP Builder (بک‌اند) ----------
+FROM php:8.3-fpm AS php_builder
+
+# نصب ابزارها و اکستنشن‌های PHP ضروری
 RUN apt-get update && apt-get install -y \
-    git curl zip unzip libpng-dev libonig-dev libxml2-dev libzip-dev libicu-dev \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl
+    git zip unzip libpng-dev libonig-dev libxml2-dev libzip-dev libicu-dev \
+    && docker-php-ext-install pdo_mysql bcmath gd intl zip opcache
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www
 
-# 1️⃣ کپی همه فایل‌ها (نه فقط composer.json)
+# کپی سورس پروژه به کانتینر
 COPY . .
 
-# 2️⃣ نصب پکیج‌ها
+# نصب dependencies PHP
 RUN composer install --no-dev --optimize-autoloader
 
+# کپی فایل‌های ساخته شده توسط Node
+COPY --from=node_builder /app/public/build ./public/build
 
-# ---------- Stage 2: Node (Vite build) ----------
-FROM node:20-alpine as node_builder
+# تنظیمات مالکیت و مجوزها
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 755 /var/www
 
-WORKDIR /app
-COPY --from=php_builder /var/www /app
-
-RUN npm install
-RUN npm run build
-
-
-# ---------- Stage 3: Final runtime ----------
-FROM php:8.2-fpm
-
-RUN apt-get update && apt-get install -y \
-    libpng-dev libzip-dev \
-    && docker-php-ext-install pdo_mysql gd zip
-
-WORKDIR /var/www
-
-COPY --from=php_builder /var/www /var/www
-COPY --from=node_builder /app/public/build /var/www/public/build
-
-RUN chown -R www-data:www-data storage bootstrap/cache
-
+# Expose PHP-FPM port
 EXPOSE 9000
+
 CMD ["php-fpm"]
